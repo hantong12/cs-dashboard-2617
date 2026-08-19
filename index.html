@@ -518,6 +518,7 @@
             if (charts.benchRadar) charts.benchRadar.destroy();
 
             // Per-axis max for 0-100 scaling: pct→100, time→480min(8h), volume→10000
+            // Time is inverted: lower = better = larger area (max - value) / max * 100
             const maxVals = [100, 100, 480, 480, 10000, 100];
             const respMin = Math.round(parseTime(jul.avgResp) / 60);
             const waitMin = Math.round(parseTime(jul.avgWait) / 60);
@@ -527,8 +528,14 @@
             const agentReal = [jul.resp1m, jul.resp5m, respMin, waitMin, jul.questions, jul.recv5m];
             const benchReal = [benchmark.resp1m, benchmark.resp5m, benchRespMin, benchWaitMin, benchmark.volume, benchmark.recv5m];
             const realUnits = ['%', '%', 'min', 'min', '', '%'];
-            const agentScaled = agentReal.map((v, i) => Math.min(100, v / maxVals[i] * 100));
-            const benchScaled = benchReal.map((v, i) => Math.min(100, v / maxVals[i] * 100));
+            const agentScaled = agentReal.map((v, i) => {
+                if (i === 2 || i === 3) return Math.min(100, (maxVals[i] - v) / maxVals[i] * 100); // time: inverted
+                return Math.min(100, v / maxVals[i] * 100);
+            });
+            const benchScaled = benchReal.map((v, i) => {
+                if (i === 2 || i === 3) return Math.min(100, (maxVals[i] - v) / maxVals[i] * 100);
+                return Math.min(100, v / maxVals[i] * 100);
+            });
 
             const labels = [t('radarResp1m'), t('radarResp5m'), t('radarAvgResp'), t('radarAvgWait'), t('radarVolume'), t('radarRecv5m')];
 
