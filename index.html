@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>客服绩效看板 - 2617</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f6fa; color: #333; padding: 20px; max-width: 1400px; margin: 0 auto; }
+        h1 { font-size: 24px; margin-bottom: 8px; }
+        .subtitle { color: #888; font-size: 13px; margin-bottom: 24px; }
+        .lang-switch { position: fixed; top: 12px; right: 20px; z-index: 999; display: flex; gap: 6px; }
+        .lang-switch button { padding: 4px 12px; border: 1px solid #ddd; border-radius: 4px; background: #fff; cursor: pointer; font-size: 12px; }
+        .lang-switch button.active { background: #667eea; color: #fff; border-color: #667eea; }
+
+        /* Summary cards */
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+        .card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .card-label { font-size: 12px; color: #888; margin-bottom: 6px; }
+        .card-value { font-size: 28px; font-weight: 700; color: #1a1a2e; }
+        .card-sub { font-size: 12px; color: #aaa; margin-top: 4px; }
+        .card-change { font-size: 12px; margin-top: 4px; font-weight: 600; }
+        .card-change.up { color: #52c41a; }
+        .card-change.down { color: #ff4d4f; }
+
+        /* Sections */
+        .section { background: #fff; border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .section-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+        .section-note { font-size: 12px; color: #999; margin-bottom: 16px; }
+
+        /* Tables */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { background: #f7f8fa; padding: 10px 12px; text-align: center; font-weight: 600; color: #555; border-bottom: 2px solid #e8e8e8; white-space: nowrap; }
+        th:first-child { text-align: left; }
+        td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; }
+        td:first-child { font-weight: 500; }
+        .num { text-align: center; font-variant-numeric: tabular-nums; }
+        .highlight { font-weight: 700; color: #1a1a2e; }
+        tr:hover td { background: #fafbfe; }
+
+        /* Badges */
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .badge-excellent { background: #e6f7e6; color: #389e0d; }
+        .badge-good { background: #e6f7ff; color: #096dd9; }
+        .badge-warning { background: #fff7e6; color: #d48806; }
+        .badge-danger { background: #fff1f0; color: #cf1322; }
+        .badge-neutral { background: #f5f5f5; color: #888; }
+
+        /* Charts */
+        .chart-container { position: relative; height: 320px; margin: 16px 0; }
+        .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        @media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
+
+        /* Agent cards */
+        .agent-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .agent-card { background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .agent-card h4 { font-size: 15px; margin-bottom: 12px; color: #1a1a2e; }
+        .agent-metric { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
+        .agent-metric:last-child { border-bottom: none; }
+        .agent-metric .label { color: #666; }
+        .agent-metric .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .agent-metric .value.good { color: #389e0d; }
+        .agent-metric .value.warn { color: #d48806; }
+        .agent-metric .value.bad { color: #cf1322; }
+
+        /* Footer */
+        .footer { text-align: center; color: #bbb; font-size: 11px; padding: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="lang-switch">
+        <button class="active" onclick="switchLang('zh')">中文</button>
+        <button onclick="switchLang('en')">EN</button>
+    </div>
+
+    <h1 data-i18n="title">客服绩效看板</h1>
+    <p class="subtitle" data-i18n="subtitle">数据来源：Metabase 嵌入看板（org 2617） · 2026年5-7月</p>
+
+    <!-- 汇总卡片 -->
+    <div class="cards" id="summaryCards"></div>
+
+    <!-- 5-7月核心指标对比 -->
+    <div class="section">
+        <div class="section-title" data-i18n="coreTitle">5-7月核心指标对比</div>
+        <p class="section-note" data-i18n="coreNote">口径：售前表/响应表汇总行（全组织），响应指标来自响应表</p>
+        <div class="table-wrap">
+        <table class="comparison-table">
+            <thead>
+                <tr><th data-i18n="metric">指标</th><th data-i18n="may">5月</th><th data-i18n="jun">6月</th><th data-i18n="jul">7月</th><th data-i18n="trend">趋势</th></tr>
+            </thead>
+            <tbody id="coreTableBody"></tbody>
+        </table>
+        </div>
+    </div>
+
+    <!-- 客服账号明细 -->
+    <div class="section">
+        <div class="section-title" data-i18n="agentTitle">客服账号明细</div>
+        <p class="section-note" data-i18n="agentNote">各客服账号5-7月关键指标（不含机器人账号）</p>
+        <div class="table-wrap">
+        <table class="comparison-table">
+            <thead>
+                <tr>
+                    <th data-i18n="agent">客服</th>
+                    <th data-i18n="month">月份</th>
+                    <th data-i18n="humanBuyers">人工接待买家</th>
+                    <th data-i18n="humanConv">人工转化率</th>
+                    <th data-i18n="orderAmount">下单金额</th>
+                    <th data-i18n="questions">响应问题数</th>
+                    <th data-i18n="avgResp">平均响应</th>
+                    <th data-i18n="rate1m">1分钟响应率</th>
+                    <th data-i18n="rate5m">5分钟响应率</th>
+                    <th data-i18n="avgWait">平均等待</th>
+                </tr>
+            </thead>
+            <tbody id="agentTableBody"></tbody>
+        </table>
+        </div>
+    </div>
+
+    <!-- 图表区域 -->
+    <div class="chart-row">
+        <div class="section">
+            <div class="section-title" data-i18n="convChartTitle">转化率趋势</div>
+            <div class="chart-container"><canvas id="convChart"></canvas></div>
+        </div>
+        <div class="section">
+            <div class="section-title" data-i18n="respChartTitle">响应率趋势</div>
+            <div class="chart-container"><canvas id="respChart"></canvas></div>
+        </div>
+    </div>
+
+    <div class="chart-row">
+        <div class="section">
+            <div class="section-title" data-i18n="volumeChartTitle">接待量趋势</div>
+            <div class="chart-container"><canvas id="volumeChart"></canvas></div>
+        </div>
+        <div class="section">
+            <div class="section-title" data-i18n="waitChartTitle">等待时长趋势</div>
+            <div class="chart-container"><canvas id="waitChart"></canvas></div>
+        </div>
+    </div>
+
+    <!-- 机器人数据 -->
+    <div class="section">
+        <div class="section-title" data-i18n="botTitle">机器人接待数据</div>
+        <p class="section-note" data-i18n="botNote">fenmiaoyoupin 账号（纯机器人）</p>
+        <div class="table-wrap">
+        <table class="comparison-table">
+            <thead>
+                <tr><th data-i18n="metric">指标</th><th data-i18n="may">5月</th><th data-i18n="jun">6月</th><th data-i18n="jul">7月</th><th data-i18n="trend">趋势</th></tr>
+            </thead>
+            <tbody id="botTableBody"></tbody>
+        </table>
+        </div>
+    </div>
+
+    <div class="footer" data-i18n="footer">数据抓取时间：2026-08-19 · 仅供内部参考</div>
+
+    <script>
+        // ===== i18n =====
+        const i18n = {
+            zh: {
+                title: '客服绩效看板', subtitle: '数据来源：Metabase 嵌入看板（org 2617） · 2026年5-7月',
+                coreTitle: '5-7月核心指标对比', coreNote: '口径：售前表/响应表汇总行（全组织），响应指标来自响应表',
+                metric: '指标', may: '5月', jun: '6月', jul: '7月', trend: '趋势',
+                botBuyers: '机器人接待买家数', botConv: '机器人接待转化率',
+                humanBuyers: '人工接待买家数', humanConv: '人工接待转化率', humanAmount: '人工下单金额',
+                questions: '响应买家问题数', avgResp: '人工平均响应时长', rate1m: '人工1分钟响应率',
+                rate3m: '人工3分钟响应率', rate5m: '人工5分钟响应率',
+                avgWait: '买家平均等待接待时长', recv1m: '1分钟被接待率', recv5m: '5分钟被接待率',
+                badgeSteadyGrowth: '持续增长', badgeDeclining: '持续下降', badgeMixed: '波动',
+                badgeBigImprove: '大幅改善', badgeImprove: '改善', badgeStable: '持平',
+                agentTitle: '客服账号明细', agentNote: '各客服账号5-7月关键指标（不含机器人账号）',
+                agent: '客服', month: '月份', orderAmount: '下单金额',
+                convChartTitle: '转化率趋势', respChartTitle: '响应率趋势',
+                volumeChartTitle: '接待量趋势', waitChartTitle: '等待时长趋势',
+                botTitle: '机器人接待数据', botNote: 'fenmiaoyoupin 账号（纯机器人）',
+                footer: '数据抓取时间：2026-08-19 · 仅供内部参考',
+                noData: '暂无', na: '-',
+                badgeNewInJun: '6月新增', badgeNewInJul: '7月新增', badgeDiscontinued: '7月无数据',
+                badgeHighConv: '高转化率', badgeLowConv: '低转化率',
+            },
+            en: {
+                title: 'Customer Service Dashboard', subtitle: 'Source: Metabase embedded dashboard (org 2617) · May-Jul 2026',
+                coreTitle: 'May-Jul Core Metrics Comparison', coreNote: 'Basis: presale/response table totals (full org), response metrics from response table',
+                metric: 'Metric', may: 'May', jun: 'Jun', jul: 'Jul', trend: 'Trend',
+                botBuyers: 'Bot-Served Buyers', botConv: 'Bot Conversion Rate',
+                humanBuyers: 'Human-Served Buyers', humanConv: 'Human Conv Rate', humanAmount: 'Human Order Amount',
+                questions: 'Questions Responded', avgResp: 'Avg Response Time', rate1m: '1-min Response Rate',
+                rate3m: '3-min Response Rate', rate5m: '5-min Response Rate',
+                avgWait: 'Avg Buyer Wait Time', recv1m: '1-min Reception Rate', recv5m: '5-min Reception Rate',
+                badgeSteadyGrowth: 'Steady Growth', badgeDeclining: 'Declining', badgeMixed: 'Mixed',
+                badgeBigImprove: 'Big Improvement', badgeImprove: 'Improving', badgeStable: 'Stable',
+                agentTitle: 'Agent Details', agentNote: 'Key metrics per agent for May-Jul (excluding bot accounts)',
+                agent: 'Agent', month: 'Month', orderAmount: 'Order Amount',
+                convChartTitle: 'Conversion Rate Trend', respChartTitle: 'Response Rate Trend',
+                volumeChartTitle: 'Volume Trend', waitChartTitle: 'Wait Time Trend',
+                botTitle: 'Bot Service Data', botNote: 'fenmiaoyoupin account (bot only)',
+                footer: 'Data fetched: 2026-08-19 · Internal use only',
+                noData: 'N/A', na: '-',
+                badgeNewInJun: 'New in Jun', badgeNewInJul: 'New in Jul', badgeDiscontinued: 'No Jul Data',
+                badgeHighConv: 'High Conv', badgeLowConv: 'Low Conv',
+            }
+        };
+        let currentLang = 'zh';
+        function t(k) { return i18n[currentLang][k] || k; }
+        function switchLang(lang) {
+            currentLang = lang;
+            document.querySelectorAll('.lang-switch button').forEach(b => b.classList.toggle('active', b.textContent === (lang === 'zh' ? '中文' : 'EN')));
+            document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.getAttribute('data-i18n'); if (i18n[lang][k]) el.textContent = i18n[lang][k]; });
+            renderAll();
+        }
+
+        // ===== Data =====
+        const rawData = {
+            '5月': {
+                bot: { buyers: 575, conv: 23.30 },
+                agents: {
+                    '客服1': { botBuyers: 392, botConv: 29.85, humanBuyers: 787, humanOrders: 144, humanAmount: 5278.10, humanConv: 18.30, questions: 2908, avgResp: '00:14:04', resp1m: 39.86, resp3m: 51.89, resp5m: 56.67, resp10m: 82.15, resp15m: 95.36, avgWait: '05:53:45', recv1m: 38.86, recv3m: 50.24, recv5m: 53.06, recv10m: 58.46, recv15m: 62.10 }
+                }
+            },
+            '6月': {
+                bot: { buyers: 789, conv: 20.15 },
+                agents: {
+                    '客服1': { botBuyers: 264, botConv: 19.32, humanBuyers: 578, humanOrders: 78, humanAmount: 2900.11, humanConv: 13.49, questions: 2023, avgResp: '00:20:14', resp1m: 36.83, resp3m: 45.97, resp5m: 49.43, resp10m: 75.63, resp15m: 94.32, avgWait: '08:30:22', recv1m: 36.38, recv3m: 44.24, recv5m: 45.87, recv10m: 50.07, recv15m: 53.93 },
+                    '客服2': { botBuyers: 0, botConv: null, humanBuyers: 167, humanOrders: 24, humanAmount: 1137.91, humanConv: 14.37, questions: 523, avgResp: '05:00:39', resp1m: 17.59, resp3m: 34.48, resp5m: 42.07, resp10m: 56.90, resp15m: 61.49, avgWait: '05:00:22', recv1m: 17.02, recv3m: 33.91, recv5m: 41.95, recv10m: 56.90, recv15m: 61.49 }
+                }
+            },
+            '7月': {
+                bot: { buyers: 913, conv: 20.81 },
+                agents: {
+                    '客服2': { botBuyers: 0, botConv: null, humanBuyers: 536, humanOrders: 82, humanAmount: 9556.24, humanConv: 15.30, questions: 2503, avgResp: '06:15:46', resp1m: 33.04, resp3m: 48.54, resp5m: 53.54, resp10m: 64.12, resp15m: 66.36, avgWait: '06:15:47', recv1m: 32.44, recv3m: 48.46, recv5m: 53.46, recv10m: 64.12, recv15m: 66.28 }
+                }
+            }
+        };
+
+        // ===== Helpers =====
+        function parseTime(str) {
+            if (!str || str === '-') return null;
+            const p = str.split(':');
+            return parseInt(p[0]) * 3600 + parseInt(p[1]) * 60 + parseInt(p[2]);
+        }
+        function fmtTime(str) { return str && str !== '-' ? str : t('na'); }
+        function fmtPct(v) { return v != null ? v.toFixed(2) + '%' : t('na'); }
+        function fmtMoney(v) { return v != null ? '¥' + v.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : t('na'); }
+        function fmtNum(v) { return v != null ? v.toLocaleString() : t('na'); }
+
+        function getOrgTotals(month) {
+            const d = rawData[month];
+            let humanBuyers = 0, humanOrders = 0, humanAmount = 0, questions = 0;
+            let resp1mSum = 0, resp5mSum = 0, resp1mN = 0, resp5mN = 0;
+            let recv1mSum = 0, recv5mSum = 0, recv1mN = 0, recv5mN = 0;
+            let respSecSum = 0, waitSecSum = 0, respN = 0, waitN = 0;
+
+            for (const [name, a] of Object.entries(d.agents)) {
+                humanBuyers += a.humanBuyers;
+                humanOrders += a.humanOrders;
+                humanAmount += a.humanAmount;
+                questions += a.questions;
+                if (a.resp1m != null) { resp1mSum += a.resp1m; resp1mN++; }
+                if (a.resp5m != null) { resp5mSum += a.resp5m; resp5mN++; }
+                if (a.recv1m != null) { recv1mSum += a.recv1m; recv1mN++; }
+                if (a.recv5m != null) { recv5mSum += a.recv5m; recv5mN++; }
+                const rs = parseTime(a.avgResp); if (rs != null) { respSecSum += rs; respN++; }
+                const ws = parseTime(a.avgWait); if (ws != null) { waitSecSum += ws; waitN++; }
+            }
+
+            const avgRespSec = respN > 0 ? Math.round(respSecSum / respN) : null;
+            const avgWaitSec = waitN > 0 ? Math.round(waitSecSum / waitN) : null;
+            const fmtSec = (s) => { if (s == null) return t('na'); const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sc = s%60; return `${h>0?h+'h':''}${m}m${sc}s`; };
+
+            return {
+                botBuyers: d.bot.buyers, botConv: d.bot.conv,
+                humanBuyers, humanOrders, humanAmount,
+                humanConv: humanBuyers > 0 ? (humanOrders / humanBuyers * 100) : null,
+                questions,
+                avgResp: fmtSec(avgRespSec), avgWait: fmtSec(avgWaitSec),
+                resp1m: resp1mN > 0 ? resp1mSum / resp1mN : null,
+                resp5m: resp5mN > 0 ? resp5mSum / resp5mN : null,
+                recv1m: recv1mN > 0 ? recv1mSum / recv1mN : null,
+                recv5m: recv5mN > 0 ? recv5mSum / recv5mN : null,
+            };
+        }
+
+        // ===== Render =====
+        function renderSummaryCards() {
+            const jul = getOrgTotals('7月');
+            const may = getOrgTotals('5月');
+            const cards = [
+                { label: t('botBuyers'), value: fmtNum(jul.botBuyers), sub: '7月', change: ((jul.botBuyers - may.botBuyers) / may.botBuyers * 100).toFixed(1) + '% vs 5月', up: jul.botBuyers >= may.botBuyers },
+                { label: t('humanBuyers'), value: fmtNum(jul.humanBuyers), sub: '7月', change: jul.humanBuyers > 0 ? '' : t('noData'), up: jul.humanBuyers >= may.humanBuyers },
+                { label: t('humanConv'), value: fmtPct(jul.humanConv), sub: '7月' },
+                { label: t('questions'), value: fmtNum(jul.questions), sub: '7月' },
+                { label: t('rate5m'), value: fmtPct(jul.resp5m), sub: '7月' },
+                { label: t('avgWait'), value: jul.avgWait, sub: '7月' },
+            ];
+            const el = document.getElementById('summaryCards');
+            el.innerHTML = cards.map(c => `
+                <div class="card">
+                    <div class="card-label">${c.label}</div>
+                    <div class="card-value">${c.value}</div>
+                    <div class="card-sub">${c.sub}</div>
+                    ${c.change ? `<div class="card-change ${c.up ? 'up' : 'down'}">${c.up ? '↑' : '↓'} ${c.change}</div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function renderCoreTable() {
+            const months = ['5月', '6月', '7月'];
+            const totals = months.map(m => getOrgTotals(m));
+            const rows = [
+                { label: t('botBuyers'), vals: totals.map(d => fmtNum(d.botBuyers)), trend: 'up' },
+                { label: t('botConv'), vals: totals.map(d => fmtPct(d.botConv)), trend: 'down' },
+                { label: t('humanBuyers'), vals: totals.map(d => fmtNum(d.humanBuyers)), trend: 'mixed' },
+                { label: t('humanConv'), vals: totals.map(d => fmtPct(d.humanConv)), trend: 'down' },
+                { label: t('humanAmount'), vals: totals.map(d => fmtMoney(d.humanAmount)), trend: 'up' },
+                { label: t('questions'), vals: totals.map(d => fmtNum(d.questions)), trend: 'mixed' },
+                { label: t('avgResp'), vals: totals.map(d => d.avgResp), trend: 'down' },
+                { label: t('rate1m'), vals: totals.map(d => fmtPct(d.resp1m)), trend: 'down' },
+                { label: t('rate5m'), vals: totals.map(d => fmtPct(d.resp5m)), trend: 'down' },
+                { label: t('avgWait'), vals: totals.map(d => d.avgWait), trend: 'up' },
+                { label: t('recv1m'), vals: totals.map(d => fmtPct(d.recv1m)), trend: 'down' },
+                { label: t('recv5m'), vals: totals.map(d => fmtPct(d.recv5m)), trend: 'down' },
+            ];
+            const trendBadge = (tr) => {
+                if (tr === 'up') return `<span class="badge badge-excellent">${t('badgeSteadyGrowth')}</span>`;
+                if (tr === 'down') return `<span class="badge badge-danger">${t('badgeDeclining')}</span>`;
+                return `<span class="badge badge-warning">${t('badgeMixed')}</span>`;
+            };
+            const body = document.getElementById('coreTableBody');
+            body.innerHTML = rows.map((r, i) => `
+                <tr><td>${r.label}</td>${r.vals.map(v => `<td class="num">${v}</td>`).join('')}<td>${trendBadge(r.trend)}</td></tr>
+            `).join('');
+        }
+
+        function renderAgentTable() {
+            const months = ['5月', '6月', '7月'];
+            const agents = ['客服1', '客服2'];
+            const body = document.getElementById('agentTableBody');
+            let html = '';
+            for (const agent of agents) {
+                for (const month of months) {
+                    const a = rawData[month].agents[agent];
+                    if (!a) {
+                        if (agent === '客服1' && month === '7月') {
+                            html += `<tr><td>${agent}</td><td>${month}</td><td colspan="7" style="text-align:center;color:#aaa;">${t('badgeDiscontinued')}</td></tr>`;
+                        }
+                        continue;
+                    }
+                    const convClass = a.humanConv >= 15 ? 'good' : (a.humanConv >= 10 ? '' : 'bad');
+                    const respClass = a.resp5m >= 80 ? 'good' : (a.resp5m >= 50 ? 'warn' : 'bad');
+                    const waitClass = parseTime(a.avgWait) <= 3600 ? 'good' : (parseTime(a.avgWait) <= 14400 ? 'warn' : 'bad');
+                    html += `<tr>
+                        <td>${agent}</td><td>${month}</td>
+                        <td class="num">${fmtNum(a.humanBuyers)}</td>
+                        <td class="num ${convClass}">${fmtPct(a.humanConv)}</td>
+                        <td class="num">${fmtMoney(a.humanAmount)}</td>
+                        <td class="num">${fmtNum(a.questions)}</td>
+                        <td class="num">${fmtTime(a.avgResp)}</td>
+                        <td class="num">${fmtPct(a.resp1m)}</td>
+                        <td class="num ${respClass}">${fmtPct(a.resp5m)}</td>
+                        <td class="num ${waitClass}">${fmtTime(a.avgWait)}</td>
+                    </tr>`;
+                }
+            }
+            body.innerHTML = html;
+        }
+
+        function renderBotTable() {
+            const months = ['5月', '6月', '7月'];
+            const rows = [
+                { label: t('botBuyers'), vals: months.map(m => fmtNum(rawData[m].bot.buyers)) },
+                { label: t('botConv'), vals: months.map(m => fmtPct(rawData[m].bot.conv)) },
+            ];
+            const body = document.getElementById('botTableBody');
+            body.innerHTML = rows.map(r => `
+                <tr><td>${r.label}</td>${r.vals.map(v => `<td class="num">${v}</td>`).join('')}<td><span class="badge badge-excellent">${t('badgeSteadyGrowth')}</span></td></tr>
+            `).join('');
+        }
+
+        // ===== Charts =====
+        let charts = {};
+        function renderCharts() {
+            const months = ['5月', '6月', '7月'];
+            const monthLabels = currentLang === 'en' ? ['May', 'Jun', 'Jul'] : months;
+            const totals = months.map(m => getOrgTotals(m));
+
+            // Destroy existing charts
+            Object.values(charts).forEach(c => c.destroy());
+            charts = {};
+
+            const chartOpts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }, scales: { y: { beginAtZero: true } } };
+
+            // Conversion chart
+            charts.conv = new Chart(document.getElementById('convChart'), {
+                type: 'line',
+                data: {
+                    labels: monthLabels,
+                    datasets: [
+                        { label: '机器人转化率', data: totals.map(d => d.botConv), borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.1)', fill: true, tension: 0.3 },
+                        { label: '人工转化率', data: totals.map(d => d.humanConv), borderColor: '#52c41a', backgroundColor: 'rgba(82,196,26,0.1)', fill: true, tension: 0.3 },
+                    ]
+                },
+                options: { ...chartOpts, scales: { ...chartOpts.scales, y: { ...chartOpts.scales.y, ticks: { callback: v => v + '%' } } } }
+            });
+
+            // Response rate chart
+            charts.resp = new Chart(document.getElementById('respChart'), {
+                type: 'line',
+                data: {
+                    labels: monthLabels,
+                    datasets: [
+                        { label: '1分钟响应率', data: totals.map(d => d.resp1m), borderColor: '#ff4d4f', tension: 0.3 },
+                        { label: '5分钟响应率', data: totals.map(d => d.resp5m), borderColor: '#667eea', tension: 0.3 },
+                        { label: '1分钟被接待率', data: totals.map(d => d.recv1m), borderColor: '#faad14', tension: 0.3, borderDash: [5, 5] },
+                        { label: '5分钟被接待率', data: totals.map(d => d.recv5m), borderColor: '#52c41a', tension: 0.3, borderDash: [5, 5] },
+                    ]
+                },
+                options: { ...chartOpts, scales: { ...chartOpts.scales, y: { ...chartOpts.scales.y, ticks: { callback: v => v + '%' }, max: 100 } } }
+            });
+
+            // Volume chart - per agent
+            const agentNames = ['客服1', '客服2'];
+            const volColors = ['#667eea', '#52c41a'];
+            charts.volume = new Chart(document.getElementById('volumeChart'), {
+                type: 'bar',
+                data: {
+                    labels: monthLabels,
+                    datasets: agentNames.map((name, i) => ({
+                        label: name,
+                        data: months.map(m => rawData[m].agents[name]?.humanBuyers || 0),
+                        backgroundColor: volColors[i],
+                    }))
+                },
+                options: chartOpts
+            });
+
+            // Wait time chart
+            charts.wait = new Chart(document.getElementById('waitChart'), {
+                type: 'line',
+                data: {
+                    labels: monthLabels,
+                    datasets: agentNames.map((name, i) => ({
+                        label: name,
+                        data: months.map(m => {
+                            const a = rawData[m].agents[name];
+                            if (!a) return null;
+                            const s = parseTime(a.avgWait);
+                            return s != null ? Math.round(s / 60) : null;
+                        }),
+                        borderColor: volColors[i],
+                        tension: 0.3,
+                        spanGaps: true,
+                    }))
+                },
+                options: { ...chartOpts, scales: { ...chartOpts.scales, y: { ...chartOpts.scales.y, ticks: { callback: v => v + 'min' } } } }
+            });
+        }
+
+        function renderAll() {
+            renderSummaryCards();
+            renderCoreTable();
+            renderAgentTable();
+            renderBotTable();
+            renderCharts();
+        }
+
+        renderAll();
+    </script>
+</body>
+</html>
