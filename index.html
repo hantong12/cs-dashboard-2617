@@ -164,20 +164,6 @@
         <div class="chart-container" style="height:380px;"><canvas id="benchRadarChart"></canvas></div>
     </div>
 
-    <!-- 机器人数据 -->
-    <div class="section">
-        <div class="section-title" data-i18n="botTitle">机器人接待数据</div>
-        <p class="section-note" data-i18n="botNote">fenmiaoyoupin 账号（纯机器人）</p>
-        <div class="table-wrap">
-        <table class="comparison-table">
-            <thead>
-                <tr><th data-i18n="metric">指标</th><th data-i18n="may">5月</th><th data-i18n="jun">6月</th><th data-i18n="jul">7月</th><th data-i18n="trend">趋势</th></tr>
-            </thead>
-            <tbody id="botTableBody"></tbody>
-        </table>
-        </div>
-    </div>
-
     <div class="footer" data-i18n="footer">数据抓取时间：2026-08-19 · 仅供内部参考</div>
 
     <script>
@@ -411,18 +397,6 @@
             body.innerHTML = html;
         }
 
-        function renderBotTable() {
-            const months = ['5月', '6月', '7月'];
-            const rows = [
-                { label: t('botBuyers'), vals: months.map(m => fmtNum(rawData[m].bot.buyers)) },
-                { label: t('botConv'), vals: months.map(m => fmtPct(rawData[m].bot.conv)) },
-            ];
-            const body = document.getElementById('botTableBody');
-            body.innerHTML = rows.map(r => `
-                <tr><td>${r.label}</td>${r.vals.map(v => `<td class="num">${v}</td>`).join('')}<td><span class="badge badge-excellent">${t('badgeSteadyGrowth')}</span></td></tr>
-            `).join('');
-        }
-
         // ===== Charts =====
         let charts = {};
         function renderCharts() {
@@ -543,24 +517,20 @@
             if (!jul) return;
             if (charts.benchRadar) charts.benchRadar.destroy();
 
-            // Normalize: relative to benchmark (benchmark = 100)
-            const norm = (ours, benchVal, type) => {
-                if (type === 'pct') return Math.min(100, Math.max(0, ours / benchVal * 100));
-                if (type === 'time') return Math.max(0, 100 - ours / 500); // 500s = 0 score
-                if (type === 'vol') return Math.min(100, ours / 200);
-                return ours;
-            };
+            // Raw values: percentages as-is, time in minutes, volume as-is
+            // Radar axes: pct 0-100, time shown in min (0-400 scale), volume shown as-is (0-10000 scale)
+            const respMin = Math.round(parseTime(jul.avgResp) / 60);
+            const waitMin = Math.round(parseTime(jul.avgWait) / 60);
+            const benchRespMin = Math.round(benchmark.avgRespSec / 60);
+            const benchWaitMin = Math.round(benchmark.avgWaitSec / 60);
 
-            const labels = [t('radarResp1m'), t('radarResp5m'), t('radarAvgResp'), t('radarAvgWait'), t('radarVolume'), t('radarRecv5m')];
-            const agentNorm = [
-                norm(jul.resp1m, benchmark.resp1m, 'pct'), norm(jul.resp5m, benchmark.resp5m, 'pct'),
-                norm(parseTime(jul.avgResp), benchmark.avgRespSec, 'time'), norm(parseTime(jul.avgWait), benchmark.avgWaitSec, 'time'),
-                norm(jul.questions, benchmark.volume, 'vol'), norm(jul.recv5m, benchmark.recv5m, 'pct')
-            ];
-            const benchNorm = [
-                100, 100,
-                norm(benchmark.avgRespSec, benchmark.avgRespSec, 'time'), norm(benchmark.avgWaitSec, benchmark.avgWaitSec, 'time'),
-                norm(benchmark.volume, benchmark.volume, 'vol'), 100
+            const labels = [
+                t('radarResp1m') + ' (%)',
+                t('radarResp5m') + ' (%)',
+                t('radarAvgResp') + ' (min)',
+                t('radarAvgWait') + ' (min)',
+                t('radarVolume'),
+                t('radarRecv5m') + ' (%)'
             ];
 
             charts.benchRadar = new Chart(document.getElementById('benchRadarChart'), {
@@ -568,14 +538,34 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: '客服2 (7月)', data: agentNorm, borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.15)', pointBackgroundColor: '#667eea', borderWidth: 2 },
-                        { label: t('benchBest'), data: benchNorm, borderColor: '#ff4d4f', backgroundColor: 'rgba(255,77,79,0.1)', pointBackgroundColor: '#ff4d4f', borderWidth: 2, borderDash: [5, 5] },
+                        {
+                            label: '客服2 (7月)',
+                            data: [jul.resp1m, jul.resp5m, respMin, waitMin, jul.questions, jul.recv5m],
+                            borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.15)', pointBackgroundColor: '#667eea', borderWidth: 2
+                        },
+                        {
+                            label: t('benchBest'),
+                            data: [benchmark.resp1m, benchmark.resp5m, benchRespMin, benchWaitMin, benchmark.volume, benchmark.recv5m],
+                            borderColor: '#ff4d4f', backgroundColor: 'rgba(255,77,79,0.1)', pointBackgroundColor: '#ff4d4f', borderWidth: 2, borderDash: [5, 5]
+                        },
                     ]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom', labels: { font: { size: 12 } } } },
-                    scales: { r: { min: 0, max: 100, ticks: { stepSize: 20, font: { size: 10 } }, pointLabels: { font: { size: 11 } } } }
+                    plugins: {
+                        legend: { position: 'bottom', labels: { font: { size: 12 } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    const i = ctx.dataIndex;
+                                    const v = ctx.raw;
+                                    const units = ['%', '%', 'min', 'min', '', '%'];
+                                    return ctx.dataset.label + ': ' + v + units[i];
+                                }
+                            }
+                        }
+                    },
+                    scales: { r: { min: 0, ticks: { font: { size: 10 } }, pointLabels: { font: { size: 11 } } } }
                 }
             });
         }
@@ -586,7 +576,6 @@
             renderAgentTable();
             renderBenchTable();
             renderBenchRadar();
-            renderBotTable();
             renderCharts();
         }
 
