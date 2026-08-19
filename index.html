@@ -203,7 +203,7 @@
                 benchBest: '行业标杆', benchGap: '差距',
                 benchConv: '人工接待后下单转化率',
                 benchReply: '人工响应买家数',
-                benchRadarTitle: '客服账号与行业标杆六边形能力图', benchRadarNote: '维度：1分钟响应率 | 5分钟响应率 | 转化率 | 平均响应时间 | 平均等待时间 | 接待量 | 5分钟被接待率',
+                benchRadarTitle: '客服账号与行业标杆六边形能力图', benchRadarNote: '维度：1分钟响应率 | 5分钟响应率 | 平均响应时间 | 平均等待时间 | 接待量 | 5分钟被接待率',
                 radarResp1m: '1分钟响应率', radarResp5m: '5分钟响应率', radarConv: '转化率',
                 radarAvgResp: '平均响应时间', radarAvgWait: '平均等待时间', radarVolume: '接待量', radarRecv5m: '5分钟被接待率',
                 footer: '数据抓取时间：2026-08-19 · 仅供内部参考',
@@ -231,7 +231,7 @@
                 benchBest: 'Benchmark', benchGap: 'Gap',
                 benchConv: 'Human Order Conv Rate',
                 benchReply: 'Questions Responded',
-                benchRadarTitle: 'Agent & Benchmark Radar', benchRadarNote: 'Dims: 1-min Resp | 5-min Resp | Conversion | Avg Resp Time | Avg Wait | Volume | 5-min Reception',
+                benchRadarTitle: 'Agent & Benchmark Radar', benchRadarNote: 'Dims: 1-min Resp | 5-min Resp | Avg Resp Time | Avg Wait | Volume | 5-min Reception',
                 radarResp1m: '1-min Resp', radarResp5m: '5-min Resp', radarConv: 'Conversion',
                 radarAvgResp: 'Avg Resp Time', radarAvgWait: 'Avg Wait', radarVolume: 'Volume', radarRecv5m: '5-min Reception',
                 footer: 'Data fetched: 2026-08-19 · Internal use only',
@@ -430,9 +430,9 @@
             const monthLabels = currentLang === 'en' ? ['May', 'Jun', 'Jul'] : months;
             const totals = months.map(m => getOrgTotals(m));
 
-            // Destroy existing charts
-            Object.values(charts).forEach(c => c.destroy());
-            charts = {};
+            // Destroy existing charts (except benchRadar which is managed separately)
+            Object.entries(charts).forEach(([k, c]) => { if (k !== 'benchRadar') c.destroy(); });
+            charts.benchRadar = charts.benchRadar; // preserve
 
             const chartOpts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }, scales: { y: { beginAtZero: true } } };
 
@@ -509,7 +509,6 @@
             const rows = [
                 { label: t('rate1m'), ours: jul.resp1m, bench: benchmark.resp1m, unit: '%', higher: true },
                 { label: t('rate5m'), ours: jul.resp5m, bench: benchmark.resp5m, unit: '%', higher: true },
-                { label: t('benchConv'), ours: jul.humanConv, bench: benchmark.conv, unit: '%', higher: true },
                 { label: t('avgResp'), ours: parseTime(jul.avgResp), bench: benchmark.avgRespSec, unit: 's', higher: false },
                 { label: t('avgWait'), ours: parseTime(jul.avgWait), bench: benchmark.avgWaitSec, unit: 's', higher: false },
                 { label: t('recv1m'), ours: jul.recv1m, bench: benchmark.recv1m, unit: '%', higher: true },
@@ -544,24 +543,24 @@
             if (!jul) return;
             if (charts.benchRadar) charts.benchRadar.destroy();
 
-            // Normalize: percent -> (v-50)*2 clamped 0-100; time -> 100-s/8; volume -> v/200
-            const norm = (v, type) => {
-                if (type === 'pct') return Math.min(100, Math.max(0, (v - 50) * 2));
-                if (type === 'time') return Math.max(0, 100 - v / 8);
-                if (type === 'vol') return Math.min(100, v / 200);
-                return v;
+            // Normalize: relative to benchmark (benchmark = 100)
+            const norm = (ours, benchVal, type) => {
+                if (type === 'pct') return Math.min(100, Math.max(0, ours / benchVal * 100));
+                if (type === 'time') return Math.max(0, 100 - ours / 500); // 500s = 0 score
+                if (type === 'vol') return Math.min(100, ours / 200);
+                return ours;
             };
 
-            const labels = [t('radarResp1m'), t('radarResp5m'), t('radarConv'), t('radarAvgResp'), t('radarAvgWait'), t('radarVolume'), t('radarRecv5m')];
+            const labels = [t('radarResp1m'), t('radarResp5m'), t('radarAvgResp'), t('radarAvgWait'), t('radarVolume'), t('radarRecv5m')];
             const agentNorm = [
-                norm(jul.resp1m, 'pct'), norm(jul.resp5m, 'pct'), jul.humanConv * 3,
-                norm(parseTime(jul.avgResp), 'time'), norm(parseTime(jul.avgWait), 'time'),
-                norm(jul.questions, 'vol'), norm(jul.recv5m, 'pct')
+                norm(jul.resp1m, benchmark.resp1m, 'pct'), norm(jul.resp5m, benchmark.resp5m, 'pct'),
+                norm(parseTime(jul.avgResp), benchmark.avgRespSec, 'time'), norm(parseTime(jul.avgWait), benchmark.avgWaitSec, 'time'),
+                norm(jul.questions, benchmark.volume, 'vol'), norm(jul.recv5m, benchmark.recv5m, 'pct')
             ];
             const benchNorm = [
-                norm(benchmark.resp1m, 'pct'), norm(benchmark.resp5m, 'pct'), benchmark.conv * 3,
-                norm(benchmark.avgRespSec, 'time'), norm(benchmark.avgWaitSec, 'time'),
-                norm(benchmark.volume, 'vol'), norm(benchmark.recv5m, 'pct')
+                100, 100,
+                norm(benchmark.avgRespSec, benchmark.avgRespSec, 'time'), norm(benchmark.avgWaitSec, benchmark.avgWaitSec, 'time'),
+                norm(benchmark.volume, benchmark.volume, 'vol'), 100
             ];
 
             charts.benchRadar = new Chart(document.getElementById('benchRadarChart'), {
