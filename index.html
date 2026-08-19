@@ -517,37 +517,28 @@
             if (!jul) return;
             if (charts.benchRadar) charts.benchRadar.destroy();
 
-            // Raw values: percentages as-is, time in minutes, volume as-is
-            // Radar axes: pct 0-100, time shown in min (0-400 scale), volume shown as-is (0-10000 scale)
+            // Per-axis max for 0-100 scaling: pct→100, time→480min(8h), volume→10000
+            const maxVals = [100, 100, 480, 480, 10000, 100];
             const respMin = Math.round(parseTime(jul.avgResp) / 60);
             const waitMin = Math.round(parseTime(jul.avgWait) / 60);
             const benchRespMin = Math.round(benchmark.avgRespSec / 60);
             const benchWaitMin = Math.round(benchmark.avgWaitSec / 60);
 
-            const labels = [
-                t('radarResp1m') + ' (%)',
-                t('radarResp5m') + ' (%)',
-                t('radarAvgResp') + ' (min)',
-                t('radarAvgWait') + ' (min)',
-                t('radarVolume'),
-                t('radarRecv5m') + ' (%)'
-            ];
+            const agentReal = [jul.resp1m, jul.resp5m, respMin, waitMin, jul.questions, jul.recv5m];
+            const benchReal = [benchmark.resp1m, benchmark.resp5m, benchRespMin, benchWaitMin, benchmark.volume, benchmark.recv5m];
+            const realUnits = ['%', '%', 'min', 'min', '', '%'];
+            const agentScaled = agentReal.map((v, i) => Math.min(100, v / maxVals[i] * 100));
+            const benchScaled = benchReal.map((v, i) => Math.min(100, v / maxVals[i] * 100));
+
+            const labels = [t('radarResp1m'), t('radarResp5m'), t('radarAvgResp'), t('radarAvgWait'), t('radarVolume'), t('radarRecv5m')];
 
             charts.benchRadar = new Chart(document.getElementById('benchRadarChart'), {
                 type: 'radar',
                 data: {
                     labels: labels,
                     datasets: [
-                        {
-                            label: '客服2 (7月)',
-                            data: [jul.resp1m, jul.resp5m, respMin, waitMin, jul.questions, jul.recv5m],
-                            borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.15)', pointBackgroundColor: '#667eea', borderWidth: 2
-                        },
-                        {
-                            label: t('benchBest'),
-                            data: [benchmark.resp1m, benchmark.resp5m, benchRespMin, benchWaitMin, benchmark.volume, benchmark.recv5m],
-                            borderColor: '#ff4d4f', backgroundColor: 'rgba(255,77,79,0.1)', pointBackgroundColor: '#ff4d4f', borderWidth: 2, borderDash: [5, 5]
-                        },
+                        { label: '客服2 (7月)', data: agentScaled, borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.15)', pointBackgroundColor: '#667eea', borderWidth: 2 },
+                        { label: t('benchBest'), data: benchScaled, borderColor: '#ff4d4f', backgroundColor: 'rgba(255,77,79,0.1)', pointBackgroundColor: '#ff4d4f', borderWidth: 2, borderDash: [5, 5] },
                     ]
                 },
                 options: {
@@ -558,14 +549,13 @@
                             callbacks: {
                                 label: function(ctx) {
                                     const i = ctx.dataIndex;
-                                    const v = ctx.raw;
-                                    const units = ['%', '%', 'min', 'min', '', '%'];
-                                    return ctx.dataset.label + ': ' + v + units[i];
+                                    const real = ctx.datasetIndex === 0 ? agentReal[i] : benchReal[i];
+                                    return ctx.dataset.label + ': ' + real + realUnits[i];
                                 }
                             }
                         }
                     },
-                    scales: { r: { min: 0, ticks: { font: { size: 10 } }, pointLabels: { font: { size: 11 } } } }
+                    scales: { r: { min: 0, max: 100, ticks: { stepSize: 20, font: { size: 10 } }, pointLabels: { font: { size: 11 } } } }
                 }
             });
         }
