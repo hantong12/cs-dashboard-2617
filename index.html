@@ -143,6 +143,27 @@
         </div>
     </div>
 
+    <!-- 行业标杆对比 -->
+    <div class="section">
+        <div class="section-title" data-i18n="benchTitle">客服账号 vs 行业标杆（7月）</div>
+        <p class="section-note" data-i18n="benchNote">口径：客服2为7月响应表/售前表数据；行业标杆为客服绩效数据中15个账号各指标的最优值（匿名）。越小越好的指标取最小值，越大越好的指标取最大值</p>
+        <div class="table-wrap">
+        <table class="comparison-table">
+            <thead>
+                <tr><th data-i18n="metric">指标</th><th>客服2 (7月)</th><th data-i18n="benchBest">行业标杆</th><th data-i18n="benchGap">差距</th></tr>
+            </thead>
+            <tbody id="benchTableBody"></tbody>
+        </table>
+        </div>
+    </div>
+
+    <!-- 标杆六边形 -->
+    <div class="section">
+        <div class="section-title" data-i18n="benchRadarTitle">客服账号与行业标杆六边形能力图</div>
+        <p class="section-note" data-i18n="benchRadarNote">维度：1分钟响应率 | 5分钟响应率 | 转化率 | 平均响应时间 | 平均等待时间 | 接待量 | 5分钟被接待率</p>
+        <div class="chart-container" style="height:380px;"><canvas id="benchRadarChart"></canvas></div>
+    </div>
+
     <!-- 机器人数据 -->
     <div class="section">
         <div class="section-title" data-i18n="botTitle">机器人接待数据</div>
@@ -178,6 +199,13 @@
                 convChartTitle: '转化率趋势', respChartTitle: '响应率趋势',
                 volumeChartTitle: '接待量趋势', waitChartTitle: '等待时长趋势',
                 botTitle: '机器人接待数据', botNote: 'fenmiaoyoupin 账号（纯机器人）',
+                benchTitle: '客服账号 vs 行业标杆（7月）', benchNote: '口径：客服2为7月响应表/售前表数据；行业标杆为客服绩效数据中15个账号各指标的最优值（匿名）。越小越好的指标取最小值，越大越好的指标取最大值',
+                benchBest: '行业标杆', benchGap: '差距',
+                benchConv: '人工接待后下单转化率',
+                benchReply: '人工响应买家数',
+                benchRadarTitle: '客服账号与行业标杆六边形能力图', benchRadarNote: '维度：1分钟响应率 | 5分钟响应率 | 转化率 | 平均响应时间 | 平均等待时间 | 接待量 | 5分钟被接待率',
+                radarResp1m: '1分钟响应率', radarResp5m: '5分钟响应率', radarConv: '转化率',
+                radarAvgResp: '平均响应时间', radarAvgWait: '平均等待时间', radarVolume: '接待量', radarRecv5m: '5分钟被接待率',
                 footer: '数据抓取时间：2026-08-19 · 仅供内部参考',
                 noData: '暂无', na: '-',
                 badgeNewInJun: '6月新增', badgeNewInJul: '7月新增', badgeDiscontinued: '7月无数据',
@@ -199,6 +227,13 @@
                 convChartTitle: 'Conversion Rate Trend', respChartTitle: 'Response Rate Trend',
                 volumeChartTitle: 'Volume Trend', waitChartTitle: 'Wait Time Trend',
                 botTitle: 'Bot Service Data', botNote: 'fenmiaoyoupin account (bot only)',
+                benchTitle: 'Agent vs Industry Benchmark (Jul)', benchNote: 'Basis: 客服2 from Jul response/presale tables; benchmark = best of 15 accounts in CS perf data (anonymous). Lower-is-better takes min, higher-is-better takes max',
+                benchBest: 'Benchmark', benchGap: 'Gap',
+                benchConv: 'Human Order Conv Rate',
+                benchReply: 'Questions Responded',
+                benchRadarTitle: 'Agent & Benchmark Radar', benchRadarNote: 'Dims: 1-min Resp | 5-min Resp | Conversion | Avg Resp Time | Avg Wait | Volume | 5-min Reception',
+                radarResp1m: '1-min Resp', radarResp5m: '5-min Resp', radarConv: 'Conversion',
+                radarAvgResp: 'Avg Resp Time', radarAvgWait: 'Avg Wait', radarVolume: 'Volume', radarRecv5m: '5-min Reception',
                 footer: 'Data fetched: 2026-08-19 · Internal use only',
                 noData: 'N/A', na: '-',
                 badgeNewInJun: 'New in Jun', badgeNewInJul: 'New in Jul', badgeDiscontinued: 'No Jul Data',
@@ -235,6 +270,13 @@
                     '客服2': { botBuyers: 0, botConv: null, humanBuyers: 536, humanOrders: 82, humanAmount: 9556.24, humanConv: 15.30, questions: 2503, avgResp: '06:15:46', resp1m: 33.04, resp3m: 48.54, resp5m: 53.54, resp10m: 64.12, resp15m: 66.36, avgWait: '06:15:47', recv1m: 32.44, recv3m: 48.46, recv5m: 53.46, recv10m: 64.12, recv15m: 66.28 }
                 }
             }
+        };
+
+        // ===== Benchmark Data =====
+        const benchmark = {
+            resp1m: 95.00, resp5m: 99.97,
+            conv: 9.20, avgRespSec: 25, avgWaitSec: 53,
+            recv1m: 93.17, recv5m: 99.25, volume: 19512
         };
 
         // ===== Helpers =====
@@ -460,10 +502,91 @@
             });
         }
 
+        function renderBenchTable() {
+            const jul = rawData['7月'].agents['客服2'];
+            if (!jul) return;
+            const fmtSec = (s) => { const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sc = s%60; return `${h>0?h+'h':''}${m}m${sc}s`; };
+            const rows = [
+                { label: t('rate1m'), ours: jul.resp1m, bench: benchmark.resp1m, unit: '%', higher: true },
+                { label: t('rate5m'), ours: jul.resp5m, bench: benchmark.resp5m, unit: '%', higher: true },
+                { label: t('benchConv'), ours: jul.humanConv, bench: benchmark.conv, unit: '%', higher: true },
+                { label: t('avgResp'), ours: parseTime(jul.avgResp), bench: benchmark.avgRespSec, unit: 's', higher: false },
+                { label: t('avgWait'), ours: parseTime(jul.avgWait), bench: benchmark.avgWaitSec, unit: 's', higher: false },
+                { label: t('recv1m'), ours: jul.recv1m, bench: benchmark.recv1m, unit: '%', higher: true },
+                { label: t('recv5m'), ours: jul.recv5m, bench: benchmark.recv5m, unit: '%', higher: true },
+                { label: t('questions'), ours: jul.questions, bench: benchmark.volume, unit: '', higher: true },
+            ];
+            const body = document.getElementById('benchTableBody');
+            body.innerHTML = rows.map(r => {
+                let oursStr, benchStr, gapStr, badgeCls;
+                if (r.unit === 's') {
+                    oursStr = fmtSec(r.ours); benchStr = fmtSec(r.bench);
+                    const diff = r.ours - r.bench;
+                    if (r.higher) { gapStr = diff > 0 ? `+${fmtSec(Math.abs(diff))}` : `-${fmtSec(Math.abs(diff))}`; badgeCls = diff <= 0 ? 'badge-excellent' : 'badge-danger'; }
+                    else { gapStr = diff > 0 ? `慢 ${fmtSec(diff)}` : `快 ${fmtSec(-diff)}`; badgeCls = diff <= 0 ? 'badge-excellent' : 'badge-danger'; }
+                } else if (r.unit === '%') {
+                    oursStr = fmtPct(r.ours); benchStr = fmtPct(r.bench);
+                    const diff = (r.ours - r.bench).toFixed(2);
+                    gapStr = (diff >= 0 ? '+' : '') + diff + 'pp';
+                    badgeCls = (r.higher ? diff >= 0 : diff <= 0) ? 'badge-excellent' : 'badge-danger';
+                } else {
+                    oursStr = fmtNum(r.ours); benchStr = fmtNum(r.bench);
+                    const diff = r.ours - r.bench;
+                    gapStr = (diff >= 0 ? '+' : '') + diff.toLocaleString();
+                    badgeCls = diff >= 0 ? 'badge-excellent' : 'badge-warning';
+                }
+                return `<tr><td>${r.label}</td><td class="num">${oursStr}</td><td class="num highlight">${benchStr}</td><td class="num"><span class="badge ${badgeCls}">${gapStr}</span></td></tr>`;
+            }).join('');
+        }
+
+        function renderBenchRadar() {
+            const jul = rawData['7月'].agents['客服2'];
+            if (!jul) return;
+            if (charts.benchRadar) charts.benchRadar.destroy();
+
+            // Normalize: percent -> (v-50)*2 clamped 0-100; time -> 100-s/8; volume -> v/200
+            const norm = (v, type) => {
+                if (type === 'pct') return Math.min(100, Math.max(0, (v - 50) * 2));
+                if (type === 'time') return Math.max(0, 100 - v / 8);
+                if (type === 'vol') return Math.min(100, v / 200);
+                return v;
+            };
+
+            const labels = [t('radarResp1m'), t('radarResp5m'), t('radarConv'), t('radarAvgResp'), t('radarAvgWait'), t('radarVolume'), t('radarRecv5m')];
+            const agentNorm = [
+                norm(jul.resp1m, 'pct'), norm(jul.resp5m, 'pct'), jul.humanConv * 3,
+                norm(parseTime(jul.avgResp), 'time'), norm(parseTime(jul.avgWait), 'time'),
+                norm(jul.questions, 'vol'), norm(jul.recv5m, 'pct')
+            ];
+            const benchNorm = [
+                norm(benchmark.resp1m, 'pct'), norm(benchmark.resp5m, 'pct'), benchmark.conv * 3,
+                norm(benchmark.avgRespSec, 'time'), norm(benchmark.avgWaitSec, 'time'),
+                norm(benchmark.volume, 'vol'), norm(benchmark.recv5m, 'pct')
+            ];
+
+            charts.benchRadar = new Chart(document.getElementById('benchRadarChart'), {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: '客服2 (7月)', data: agentNorm, borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.15)', pointBackgroundColor: '#667eea', borderWidth: 2 },
+                        { label: t('benchBest'), data: benchNorm, borderColor: '#ff4d4f', backgroundColor: 'rgba(255,77,79,0.1)', pointBackgroundColor: '#ff4d4f', borderWidth: 2, borderDash: [5, 5] },
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { font: { size: 12 } } } },
+                    scales: { r: { min: 0, max: 100, ticks: { stepSize: 20, font: { size: 10 } }, pointLabels: { font: { size: 11 } } } }
+                }
+            });
+        }
+
         function renderAll() {
             renderSummaryCards();
             renderCoreTable();
             renderAgentTable();
+            renderBenchTable();
+            renderBenchRadar();
             renderBotTable();
             renderCharts();
         }
